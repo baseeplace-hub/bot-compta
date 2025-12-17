@@ -3,7 +3,7 @@
 
 import discord
 from discord.ext import commands
-import sqlite3
+# import sqlite3
 from datetime import datetime
 
 # -------- CONFIG DISCORD --------
@@ -13,7 +13,7 @@ intents.message_content = True
 bot = commands.Bot(command_prefix="!", intents=intents)
 
 # -------- BASE DE DONNÉES --------
-conn = sqlite3.connect("compta.db")
+# conn = sqlite3.connect("compta.db")
 cursor = conn.cursor()
 
 cursor.execute("""
