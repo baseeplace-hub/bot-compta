@@ -1,7 +1,7 @@
 import os
 import json
 import discord
-from discord.ext import commands
+from discord import app_commands
 from datetime import datetime
 
 # -------- CONFIG --------
@@ -9,8 +9,8 @@ DATA_FILE = "data.json"
 SOLDE_DEPART = 0
 
 intents = discord.Intents.default()
-intents.message_content = True
-bot = commands.Bot(command_prefix="!", intents=intents)
+client = discord.Client(intents=intents)
+tree = app_commands.CommandTree(client)
 
 # -------- DATA --------
 def load_data():
@@ -24,62 +24,83 @@ def save_data(data):
         json.dump(data, f, indent=2, ensure_ascii=False)
 
 # -------- EVENTS --------
-@bot.event
+@client.event
 async def on_ready():
-    print(f"Connecté en tant que {bot.user}")
+    await tree.sync()
+    print(f"Connecté en tant que {client.user}")
 
-# -------- COMMANDES --------
-@bot.command()
-async def test(ctx):
-    await ctx.send("Le bot fonctionne ✅")
+# -------- SLASH COMMANDS --------
 
-@bot.command()
-async def add(ctx, type, montant: float, *, libelle):
-    type = type.lower()
-    if type not in ["depense", "recu"]:
-        await ctx.send("❌ Utilise `depense` ou `recu`")
-        return
-
+@tree.command(name="depense", description="Ajouter une dépense")
+@app_commands.describe(
+    montant="Montant de la dépense",
+    libelle="Ex: macdo, essence, loyer..."
+)
+async def depense(interaction: discord.Interaction, montant: float, libelle: str):
     data = load_data()
     data.append({
         "date": datetime.now().strftime("%d/%m/%Y"),
-        "type": type,
+        "type": "depense",
         "montant": montant,
         "libelle": libelle
     })
     save_data(data)
 
-    await ctx.send(f"✅ {type} ajoutée : {montant}€ — {libelle}")
+    await interaction.response.send_message(
+        f"💸 Dépense ajoutée : **-{montant}€** — {libelle}",
+        ephemeral=True
+    )
 
-@bot.command()
-async def solde(ctx):
+@tree.command(name="recu", description="Ajouter un revenu")
+@app_commands.describe(
+    montant="Montant reçu",
+    libelle="Ex: salaire, remboursement..."
+)
+async def recu(interaction: discord.Interaction, montant: float, libelle: str):
+    data = load_data()
+    data.append({
+        "date": datetime.now().strftime("%d/%m/%Y"),
+        "type": "recu",
+        "montant": montant,
+        "libelle": libelle
+    })
+    save_data(data)
+
+    await interaction.response.send_message(
+        f"💰 Reçu ajouté : **+{montant}€** — {libelle}",
+        ephemeral=True
+    )
+
+@tree.command(name="solde", description="Afficher le solde")
+async def solde(interaction: discord.Interaction):
     data = load_data()
 
     total_recu = sum(x["montant"] for x in data if x["type"] == "recu")
     total_depense = sum(x["montant"] for x in data if x["type"] == "depense")
     solde = SOLDE_DEPART + total_recu - total_depense
 
-    await ctx.send(
+    await interaction.response.send_message(
         f"💰 **Solde actuel**\n"
         f"Reçus : {total_recu} €\n"
         f"Dépenses : {total_depense} €\n"
-        f"➡️ **Solde : {solde} €**"
+        f"➡️ **Solde : {solde} €**",
+        ephemeral=True
     )
 
-@bot.command()
-async def liste(ctx):
+@tree.command(name="liste", description="Voir les transactions")
+async def liste(interaction: discord.Interaction):
     data = load_data()
 
     if not data:
-        await ctx.send("📭 Aucune transaction")
+        await interaction.response.send_message("📭 Aucune transaction", ephemeral=True)
         return
 
-    message = "📋 **Dernières transactions :**\n"
-    for t in data[-10:][::-1]:
+    message = "📋 **Transactions :**\n"
+    for i, t in enumerate(data, start=1):
         signe = "-" if t["type"] == "depense" else "+"
-        message += f'{t["date"]} | {t["type"]} | {signe}{t["montant"]}€ | {t["libelle"]}\n'
+        message += f"{i}. {t['date']} | {t['type']} | {signe}{t['montant']}€ | {t['libelle']}\n"
 
-    await ctx.send(message)
+    await interaction.response.send_message(message, ephemeral=True)
 
 # -------- RUN --------
-bot.run(os.getenv("DISCORD_TOKEN"))
+client.run(os.getenv("DISCORD_TOKEN"))
